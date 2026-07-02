@@ -12,6 +12,7 @@ import RecommendationsPage from '../pages/RecommendationsPage'
 import DeadStockReportPage from '../pages/reports/DeadStockReportPage'
 import InventoryReportPage from '../pages/reports/InventoryReportPage'
 import RecommendationsReportPage from '../pages/reports/RecommendationsReportPage'
+import ProfitAdvisorReportPage from '../pages/reports/ProfitAdvisorReportPage'
 import ReportsDashboardPage from '../pages/reports/ReportsDashboardPage'
 import SalesReportPage from '../pages/reports/SalesReportPage'
 import SupplierReportPage from '../pages/reports/SupplierReportPage'
@@ -44,6 +45,7 @@ export default function AppRoutes() {
           <Route path="reports/dead-stock" element={<DeadStockReportPage />} />
           <Route path="reports/suppliers" element={<SupplierReportPage />} />
           <Route path="reports/recommendations" element={<RecommendationsReportPage />} />
+          <Route path="reports/profit-advisor" element={<ProfitAdvisorReportPage />} />
           <Route path="products" element={<ProductsPage />} />
           <Route path="sales" element={<SalesPage />} />
           <Route element={<ProtectedRoute ownerOnly />}>

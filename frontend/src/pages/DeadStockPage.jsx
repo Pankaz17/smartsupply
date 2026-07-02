@@ -3,6 +3,7 @@ import { getDeadStock } from '../api/analytics'
 import PageHeader from '../components/layout/PageHeader'
 import Alert from '../components/ui/Alert'
 import DataTable from '../components/ui/DataTable'
+import DeadStockSuggestionBadges from '../components/analytics/DeadStockSuggestionBadges'
 import Select from '../components/ui/Select'
 
 const SEVERITY_OPTIONS = [
@@ -56,6 +57,11 @@ export default function DeadStockPage() {
         </span>
       ),
     },
+    {
+      key: 'suggestions',
+      label: 'Suggested Action',
+      render: (r) => <DeadStockSuggestionBadges suggestions={r.suggestions} />,
+    },
   ]
 
   return (
@@ -83,7 +89,7 @@ export default function DeadStockPage() {
         <DataTable
           columns={columns}
           data={items}
-          emptyMessage="No dead stock detected. Run nightly analytics to refresh."
+          emptyMessage="Great! No products have become dead stock."
         />
       )}
     </div>

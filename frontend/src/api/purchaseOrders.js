@@ -12,6 +12,11 @@ export const getPurchaseOrder = async (id) => {
   return data
 }
 
+export const createPurchaseOrder = async (payload) => {
+  const { data } = await axiosClient.post('/purchase-orders/', payload)
+  return data
+}
+
 export const updatePurchaseOrderStatus = async (id, status, actualDeliveryDate = null) => {
   const payload = { status }
   if (actualDeliveryDate) {

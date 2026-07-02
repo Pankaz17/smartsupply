@@ -1,17 +1,24 @@
 import { useCallback, useEffect, useState } from 'react'
+import { getBusinessSettings } from '../api/auth'
 import {
   approveRecommendation,
   dismissRecommendation,
+  exportProfitAdvisorAnalysis,
   generateRecommendations,
+  getProfitAdvisorAnalysis,
   getRecommendations,
+  runProfitAdvisorAnalysis,
 } from '../api/recommendations'
+import ProfitAdvisorModal from '../components/recommendations/ProfitAdvisorModal'
+import ProfitAdvisorPanel from '../components/recommendations/ProfitAdvisorPanel'
 import PageHeader from '../components/layout/PageHeader'
 import Alert from '../components/ui/Alert'
 import Button from '../components/ui/Button'
+import ConfirmationDialog from '../components/ui/ConfirmationDialog'
 import DataTable from '../components/ui/DataTable'
-import PriorityBadge from '../components/ui/PriorityBadge'
 import Select from '../components/ui/Select'
 import StatusBadge from '../components/ui/StatusBadge'
+import OperationalPriorityBadge from '../components/ui/OperationalPriorityBadge'
 import { useAuth } from '../context/AuthContext'
 
 const STATUS_OPTIONS = [
@@ -29,6 +36,12 @@ export default function RecommendationsPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [acting, setActing] = useState(null)
+  const [currency, setCurrency] = useState('USD')
+  const [showAdvisorModal, setShowAdvisorModal] = useState(false)
+  const [advisorAnalysis, setAdvisorAnalysis] = useState(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [pendingConfirm, setPendingConfirm] = useState(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -39,6 +52,21 @@ export default function RecommendationsPage() {
       .catch(() => setError('Failed to load recommendations.'))
       .finally(() => setLoading(false))
   }, [statusFilter])
+
+  const loadAdvisor = useCallback(() => {
+    getProfitAdvisorAnalysis()
+      .then((data) => {
+        if (data.has_analysis) {
+          setAdvisorAnalysis(data)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    getBusinessSettings().then((s) => setCurrency(s.currency || 'USD')).catch(() => {})
+    loadAdvisor()
+  }, [loadAdvisor])
 
   useEffect(() => { load() }, [load])
 
@@ -56,6 +84,32 @@ export default function RecommendationsPage() {
     }
   }
 
+  const handleAnalyze = async (budget) => {
+    setAnalyzing(true)
+    setError('')
+    try {
+      const result = await runProfitAdvisorAnalysis(budget)
+      setAdvisorAnalysis(result)
+      setShowAdvisorModal(false)
+      setSuccess('Profit Advisor analysis complete.')
+    } catch (err) {
+      setError(err.response?.data?.budget?.[0] || err.response?.data?.detail || 'Analysis failed.')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const handleExport = async (format) => {
+    setExporting(true)
+    try {
+      await exportProfitAdvisorAnalysis(format)
+    } catch {
+      setError('Export failed. Run an analysis first.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const handleApprove = async (id) => {
     setActing(id)
     setError('')
@@ -63,6 +117,7 @@ export default function RecommendationsPage() {
     try {
       const result = await approveRecommendation(id)
       setSuccess(`Approved. Draft PO ${result.po_number} created.`)
+      setPendingConfirm(null)
       load()
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to approve recommendation.')
@@ -78,6 +133,7 @@ export default function RecommendationsPage() {
     try {
       await dismissRecommendation(id)
       setSuccess('Recommendation dismissed.')
+      setPendingConfirm(null)
       load()
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to dismiss recommendation.')
@@ -86,41 +142,25 @@ export default function RecommendationsPage() {
     }
   }
 
-  const formatMoney = (value) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0))
-
-  const formatScore = (value) => Number(value || 0).toFixed(2)
+  const handleConfirmAction = () => {
+    if (!pendingConfirm) return
+    if (pendingConfirm.action === 'approve') {
+      handleApprove(pendingConfirm.id)
+    } else {
+      handleDismiss(pendingConfirm.id)
+    }
+  }
 
   const columns = [
     { key: 'product_name', label: 'Product' },
-    { key: 'supplier_name', label: 'Supplier' },
-    { key: 'current_stock', label: 'Current Stock' },
-    {
-      key: 'calculated_reorder_point',
-      label: 'ROP',
-      render: (r) => Number(r.calculated_reorder_point).toFixed(1),
-    },
-    { key: 'recommended_quantity', label: 'Recommended Qty' },
-    {
-      key: 'unit_profit',
-      label: 'Unit Profit',
-      render: (r) => formatMoney(r.unit_profit),
-    },
-    {
-      key: 'priority_score',
-      label: 'Priority Score',
-      render: (r) => formatScore(r.priority_score),
-    },
-    {
-      key: 'expected_restock_profit',
-      label: 'Expected Restock Profit',
-      render: (r) => formatMoney(r.expected_restock_profit),
-    },
     {
       key: 'priority_level',
-      label: 'Priority Level',
-      render: (r) => <PriorityBadge level={r.priority_level} />,
+      label: 'Priority',
+      render: (r) => <OperationalPriorityBadge level={r.priority_level} />,
     },
+    { key: 'supplier_name', label: 'Supplier' },
+    { key: 'current_stock', label: 'Current Stock' },
+    { key: 'recommended_quantity', label: 'Recommended Qty' },
     {
       key: 'status',
       label: 'Status',
@@ -144,7 +184,7 @@ export default function RecommendationsPage() {
             <button
               type="button"
               disabled={acting === r.id}
-              onClick={() => handleApprove(r.id)}
+              onClick={() => setPendingConfirm({ action: 'approve', id: r.id })}
               className="text-sm font-medium text-green-600 hover:text-green-700 disabled:opacity-50"
             >
               Approve
@@ -152,7 +192,7 @@ export default function RecommendationsPage() {
             <button
               type="button"
               disabled={acting === r.id}
-              onClick={() => handleDismiss(r.id)}
+              onClick={() => setPendingConfirm({ action: 'dismiss', id: r.id })}
               className="text-sm font-medium text-slate-600 hover:text-slate-800 disabled:opacity-50"
             >
               Dismiss
@@ -171,14 +211,30 @@ export default function RecommendationsPage() {
     <div>
       <PageHeader
         title="Reorder Recommendations"
-        subtitle="Review suggestions ranked by profit and demand. You always decide."
+        subtitle="Review suggestions before creating purchase orders. You always decide."
         action={isOwner && (
-          <Button onClick={handleGenerate}>Generate Recommendations</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setShowAdvisorModal(true)}>
+              Prioritize by Profit
+            </Button>
+            <Button onClick={handleGenerate}>Generate Recommendations</Button>
+          </div>
         )}
       />
 
       <Alert type="error" message={error} />
       <Alert type="success" message={success} />
+
+      {advisorAnalysis && (
+        <ProfitAdvisorPanel
+          analysis={advisorAnalysis}
+          currency={advisorAnalysis.currency || currency}
+          onExport={handleExport}
+          exporting={exporting}
+          isOwner={isOwner}
+          onRunAgain={() => isOwner && setShowAdvisorModal(true)}
+        />
+      )}
 
       <div className="mb-4 max-w-xs">
         <Select
@@ -197,9 +253,49 @@ export default function RecommendationsPage() {
           columns={columns}
           data={recommendations}
           rowKey={(r) => r.id}
-          emptyMessage="No recommendations found. Generate recommendations to get started."
+          emptyMessage="Inventory levels look healthy. No products need reordering today."
         />
       )}
+
+      {showAdvisorModal && isOwner && (
+        <ProfitAdvisorModal
+          currency={currency}
+          onClose={() => setShowAdvisorModal(false)}
+          onAnalyze={handleAnalyze}
+          analyzing={analyzing}
+        />
+      )}
+
+      <ConfirmationDialog
+        open={pendingConfirm?.action === 'approve'}
+        title="Approve Recommendation"
+        confirmLabel="Approve"
+        onClose={() => setPendingConfirm(null)}
+        onConfirm={handleConfirmAction}
+        confirming={acting === pendingConfirm?.id}
+      >
+        <p>
+          This will create a Draft Purchase Order for the recommended product.
+        </p>
+        <p className="mt-2">
+          No inventory will be updated until the purchase order is received.
+        </p>
+      </ConfirmationDialog>
+
+      <ConfirmationDialog
+        open={pendingConfirm?.action === 'dismiss'}
+        title="Dismiss Recommendation"
+        confirmLabel="Dismiss"
+        confirmVariant="danger"
+        onClose={() => setPendingConfirm(null)}
+        onConfirm={handleConfirmAction}
+        confirming={acting === pendingConfirm?.id}
+      >
+        <p>This recommendation will be marked as dismissed.</p>
+        <p className="mt-2">
+          You can generate recommendations again later if needed.
+        </p>
+      </ConfirmationDialog>
     </div>
   )
 }

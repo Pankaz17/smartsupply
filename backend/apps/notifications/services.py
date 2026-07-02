@@ -146,6 +146,13 @@ def get_dashboard_alerts():
     if dead_stock:
         alerts.append(f'{dead_stock} dead stock item{"s require" if dead_stock != 1 else " requires"} attention')
 
+    long_unsold = DeadStockSnapshot.objects.filter(days_without_sale__gte=120).count()
+    if long_unsold:
+        alerts.append(
+            f'{long_unsold} product{"s have" if long_unsold != 1 else " has"} been unsold '
+            'for over 120 days. Consider stopping future reorders.'
+        )
+
     pending_recs = Notification.objects.filter(
         notification_type=Notification.Type.REORDER_RECOMMENDATION,
         is_read=False,

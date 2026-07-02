@@ -13,7 +13,10 @@ from apps.analytics.services import count_active_seasonal_events
 from apps.notifications.models import Notification
 from apps.notifications.serializers import NotificationSerializer
 from apps.notifications.services import get_dashboard_alerts, get_unread_count
+from apps.inventory.business_advisor import build_business_advisor_messages, get_dashboard_greeting
 from apps.products.models import Product
+from apps.purchasing.operational_priority import order_by_operational_priority
+from apps.purchasing.profit_advisor import get_latest_profit_advisor_analysis
 from apps.purchasing.models import PurchaseOrder, ReorderRecommendation
 from apps.purchasing.serializers import (
     PurchaseOrderListSerializer,
@@ -63,13 +66,15 @@ class DashboardView(APIView):
             status=PurchaseOrder.Status.ORDERED,
         ).count()
 
-        recent_recommendations = ReorderRecommendation.objects.select_related(
-            'product', 'supplier',
-        ).order_by('-priority_score', '-generated_at')[:5]
+        recent_recommendations = order_by_operational_priority(
+            ReorderRecommendation.objects.select_related('product', 'supplier'),
+        )[:5]
 
-        top_restock_priorities = ReorderRecommendation.objects.filter(
-            status=ReorderRecommendation.Status.PENDING,
-        ).select_related('product').order_by('-priority_score', '-generated_at')[:5]
+        top_operational_priorities = order_by_operational_priority(
+            ReorderRecommendation.objects.filter(
+                status=ReorderRecommendation.Status.PENDING,
+            ).select_related('product'),
+        )[:5]
         recent_purchase_orders = PurchaseOrder.objects.select_related(
             'supplier',
         ).order_by('-created_at')[:5]
@@ -99,6 +104,9 @@ class DashboardView(APIView):
             'related_product', 'related_supplier', 'related_purchase_order',
         ).order_by('-created_at')[:5]
         dashboard_alerts = get_dashboard_alerts()
+        profit_advisor = get_latest_profit_advisor_analysis()
+        greeting = get_dashboard_greeting()
+        business_advisor = build_business_advisor_messages()
 
         return Response({
             'total_products': total_products,
@@ -114,14 +122,19 @@ class DashboardView(APIView):
             'recent_recommendations': ReorderRecommendationSerializer(
                 recent_recommendations, many=True,
             ).data,
-            'top_restock_priorities': [
+            'top_operational_priorities': [
                 {
-                    'product_name': r.product.name,
-                    'priority_level': r.priority_level,
-                    'priority_score': str(r.priority_score),
+                    'product_name': rec.product.name,
+                    'priority_level': rec.priority_level,
+                    'current_stock': rec.current_stock,
+                    'recommended_quantity': rec.recommended_quantity,
                 }
-                for r in top_restock_priorities
+                for rec in top_operational_priorities
             ],
+            'profit_advisor': {
+                'has_analysis': profit_advisor is not None,
+                **(profit_advisor or {}),
+            },
             'recent_purchase_orders': PurchaseOrderListSerializer(
                 recent_purchase_orders, many=True,
             ).data,
@@ -134,4 +147,6 @@ class DashboardView(APIView):
                 recent_notifications, many=True,
             ).data,
             'dashboard_alerts': dashboard_alerts,
+            'greeting': greeting,
+            'business_advisor': business_advisor,
         })

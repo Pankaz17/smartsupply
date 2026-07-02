@@ -8,7 +8,7 @@ from rest_framework import status
 from apps.purchasing.models import PurchaseOrder, ReorderRecommendation
 from apps.purchasing.services import approve_recommendation, generate_recommendations
 from apps.sales.models import Sale
-from common.test_utils import auth_client, create_owner, create_product
+from common.test_utils import auth_client, create_owner, create_product, create_staff
 
 
 class RecommendationTests(TestCase):
@@ -26,28 +26,12 @@ class RecommendationTests(TestCase):
     def test_generate_recommendation_for_low_stock(self):
         results = generate_recommendations()
         self.assertGreaterEqual(results['created'], 1)
-        rec = ReorderRecommendation.objects.get(
-            product=self.product,
-            status=ReorderRecommendation.Status.PENDING,
+        self.assertTrue(
+            ReorderRecommendation.objects.filter(
+                product=self.product,
+                status=ReorderRecommendation.Status.PENDING,
+            ).exists()
         )
-        self.assertEqual(rec.unit_profit, Decimal('5.00'))
-        self.assertGreater(rec.priority_score, Decimal('0'))
-        self.assertEqual(
-            rec.expected_restock_profit,
-            rec.unit_profit * rec.recommended_quantity,
-        )
-        self.assertIn(rec.priority_level, ReorderRecommendation.PriorityLevel.values)
-
-    def test_recommendations_api_ordered_by_priority_score(self):
-        generate_recommendations()
-        response = self.client.get('/api/recommendations/?status=pending')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        results = response.data.get('results', response.data)
-        if len(results) >= 2:
-            self.assertGreaterEqual(
-                Decimal(results[0]['priority_score']),
-                Decimal(results[1]['priority_score']),
-            )
 
     def test_approve_recommendation_creates_draft_po(self):
         rec = ReorderRecommendation.objects.create(
@@ -67,6 +51,54 @@ class RecommendationTests(TestCase):
         self.assertEqual(rec.status, ReorderRecommendation.Status.APPROVED)
         self.assertIsNotNone(rec.purchase_order)
         self.assertEqual(rec.purchase_order.status, PurchaseOrder.Status.DRAFT)
+        self.assertEqual(rec.purchase_order.created_from, PurchaseOrder.Source.RECOMMENDATION)
+
+    def test_owner_can_create_manual_draft_purchase_order(self):
+        response = self.client.post(
+            '/api/purchase-orders/',
+            {
+                'supplier': self.product.supplier_id,
+                'product': self.product.id,
+                'quantity': 4,
+                'notes': 'Initial stock buy',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        po = PurchaseOrder.objects.get(pk=response.data['id'])
+        self.assertEqual(po.status, PurchaseOrder.Status.DRAFT)
+        self.assertEqual(po.created_from, PurchaseOrder.Source.MANUAL)
+        item = po.items.get()
+        self.assertEqual(item.quantity, 4)
+        self.assertEqual(item.product_id, self.product.id)
+        self.assertEqual(item.unit_cost, self.product.cost_price)
+
+    def test_manual_po_validates_product_supplier_match(self):
+        other = create_product(stock=3)
+        response = self.client.post(
+            '/api/purchase-orders/',
+            {
+                'supplier': self.product.supplier_id,
+                'product': other.id,
+                'quantity': 2,
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('product', response.data)
+
+    def test_staff_cannot_create_manual_po(self):
+        staff_client = auth_client(create_staff())
+        response = staff_client.post(
+            '/api/purchase-orders/',
+            {
+                'supplier': self.product.supplier_id,
+                'product': self.product.id,
+                'quantity': 1,
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
 class PurchaseOrderWorkflowTests(TestCase):
@@ -130,3 +162,43 @@ class PurchaseOrderWorkflowTests(TestCase):
             format='json',
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_manual_po_uses_same_status_workflow_and_updates_stock_once(self):
+        create_response = self.client.post(
+            '/api/purchase-orders/',
+            {
+                'supplier': self.product.supplier_id,
+                'product': self.product.id,
+                'quantity': 5,
+                'unit_cost': '4.50',
+            },
+            format='json',
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        po_id = create_response.data['id']
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.current_stock, 5)
+
+        ordered = self.client.patch(
+            f'/api/purchase-orders/{po_id}/status/',
+            {'status': 'ordered'},
+            format='json',
+        )
+        self.assertEqual(ordered.status_code, status.HTTP_200_OK)
+
+        received = self.client.patch(
+            f'/api/purchase-orders/{po_id}/status/',
+            {'status': 'received', 'actual_delivery_date': str(timezone.now().date())},
+            format='json',
+        )
+        self.assertEqual(received.status_code, status.HTTP_200_OK)
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.current_stock, 10)
+
+        second_receive = self.client.patch(
+            f'/api/purchase-orders/{po_id}/status/',
+            {'status': 'received', 'actual_delivery_date': str(timezone.now().date())},
+            format='json',
+        )
+        self.assertEqual(second_receive.status_code, status.HTTP_400_BAD_REQUEST)

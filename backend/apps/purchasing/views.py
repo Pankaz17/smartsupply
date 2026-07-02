@@ -7,11 +7,13 @@ from common.permissions import IsOwner, IsOwnerOrReadOnly
 
 from .models import PurchaseOrder, ReorderRecommendation
 from .serializers import (
+    PurchaseOrderCreateSerializer,
     PurchaseOrderDetailSerializer,
     PurchaseOrderListSerializer,
     PurchaseOrderStatusSerializer,
     ReorderRecommendationSerializer,
 )
+from .operational_priority import order_by_operational_priority
 from .services import approve_recommendation, dismiss_recommendation, generate_recommendations
 
 
@@ -22,11 +24,11 @@ class ReorderRecommendationListView(generics.ListAPIView):
     def get_queryset(self):
         qs = ReorderRecommendation.objects.select_related(
             'product', 'supplier', 'purchase_order',
-        ).order_by('-priority_score', '-generated_at')
+        ).all()
         status_param = self.request.query_params.get('status')
         if status_param:
             qs = qs.filter(status=status_param)
-        return qs
+        return order_by_operational_priority(qs)
 
 
 class GenerateRecommendationsView(APIView):
@@ -84,9 +86,8 @@ class DismissRecommendationView(APIView):
         })
 
 
-class PurchaseOrderListView(generics.ListAPIView):
+class PurchaseOrderListView(generics.ListCreateAPIView):
     permission_classes = (IsOwnerOrReadOnly,)
-    serializer_class = PurchaseOrderListSerializer
 
     def get_queryset(self):
         qs = PurchaseOrder.objects.select_related('supplier', 'created_by').all()
@@ -94,6 +95,22 @@ class PurchaseOrderListView(generics.ListAPIView):
         if status_param:
             qs = qs.filter(status=status_param)
         return qs
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return PurchaseOrderCreateSerializer
+        return PurchaseOrderListSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        po = serializer.save()
+        detail = PurchaseOrderDetailSerializer(
+            PurchaseOrder.objects.select_related(
+                'supplier', 'created_by', 'approved_by',
+            ).prefetch_related('items__product').get(pk=po.pk),
+        )
+        return Response(detail.data, status=status.HTTP_201_CREATED)
 
 
 class PurchaseOrderDetailView(generics.RetrieveAPIView):

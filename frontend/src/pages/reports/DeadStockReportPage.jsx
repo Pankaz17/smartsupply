@@ -6,6 +6,7 @@ import SummaryCards from '../../components/reports/SummaryCards'
 import PageHeader from '../../components/layout/PageHeader'
 import Alert from '../../components/ui/Alert'
 import DataTable from '../../components/ui/DataTable'
+import DeadStockSuggestionBadges from '../../components/analytics/DeadStockSuggestionBadges'
 
 const SEVERITY_STYLES = {
   warning: 'bg-amber-100 text-amber-700',
@@ -45,6 +46,11 @@ export default function DeadStockReportPage() {
           {r.severity}
         </span>
       ),
+    },
+    {
+      key: 'suggestions',
+      label: 'Suggested Action',
+      render: (r) => <DeadStockSuggestionBadges suggestions={r.suggestions} />,
     },
   ]
 

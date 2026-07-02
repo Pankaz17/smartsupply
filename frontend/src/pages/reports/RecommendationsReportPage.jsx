@@ -6,7 +6,7 @@ import SummaryCards from '../../components/reports/SummaryCards'
 import PageHeader from '../../components/layout/PageHeader'
 import Alert from '../../components/ui/Alert'
 import DataTable from '../../components/ui/DataTable'
-import PriorityBadge from '../../components/ui/PriorityBadge'
+import OperationalPriorityBadge from '../../components/ui/OperationalPriorityBadge'
 
 const STATUS_STYLES = {
   pending: 'bg-amber-100 text-amber-700',
@@ -31,23 +31,13 @@ export default function RecommendationsReportPage() {
 
   useEffect(() => { load() }, [load])
 
-  const formatMoney = (value) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0))
-
   const columns = [
     { key: 'product', label: 'Product' },
     { key: 'recommended_quantity', label: 'Recommended Quantity' },
-    { key: 'unit_profit', label: 'Unit Profit', render: (r) => formatMoney(r.unit_profit) },
-    { key: 'priority_score', label: 'Priority Score', render: (r) => Number(r.priority_score || 0).toFixed(2) },
     {
-      key: 'expected_restock_profit',
-      label: 'Expected Restock Profit',
-      render: (r) => formatMoney(r.expected_restock_profit),
-    },
-    {
-      key: 'priority_level',
-      label: 'Priority Level',
-      render: (r) => <PriorityBadge level={r.priority_level} />,
+      key: 'operational_priority',
+      label: 'Operational Priority',
+      render: (r) => <OperationalPriorityBadge level={r.operational_priority} />,
     },
     { key: 'generated_date', label: 'Generated Date' },
     {
@@ -66,7 +56,7 @@ export default function RecommendationsReportPage() {
     <div>
       <PageHeader
         title="Recommendation History Report"
-        subtitle="Reorder recommendations with profit-based priority metrics."
+        subtitle="Reorder recommendations generated and reviewed."
         action={<ExportButtons reportKey="recommendations" dateRange={dateRange} />}
       />
 

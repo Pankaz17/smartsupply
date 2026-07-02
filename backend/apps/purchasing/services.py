@@ -10,7 +10,6 @@ from apps.products.models import Product
 from apps.sales.models import Sale
 
 from .models import PurchaseOrder, PurchaseOrderItem, ReorderRecommendation
-from .priority import assign_priority_levels, calculate_profit_metrics
 
 SALES_LOOKBACK_DAYS = 30
 SAFETY_STOCK_MULTIPLIER = 3
@@ -54,18 +53,6 @@ def calculate_recommended_quantity(current_stock, reorder_point):
     return max(1, math.ceil(float(gap)))
 
 
-def _assign_pending_priority_levels():
-    """Recompute priority levels across all pending recommendations."""
-    pending = list(
-        ReorderRecommendation.objects.filter(
-            status=ReorderRecommendation.Status.PENDING,
-        )
-    )
-    assign_priority_levels(pending)
-    for rec in pending:
-        rec.save(update_fields=['priority_level'])
-
-
 def generate_recommendations():
     results = {'created': 0, 'updated': 0, 'skipped': 0}
 
@@ -89,10 +76,6 @@ def generate_recommendations():
             results['skipped'] += 1
             continue
 
-        unit_profit, priority_score, expected_restock_profit = calculate_profit_metrics(
-            product, ads, recommended_qty,
-        )
-
         pending = ReorderRecommendation.objects.filter(
             product=product,
             status=ReorderRecommendation.Status.PENDING,
@@ -106,9 +89,6 @@ def generate_recommendations():
             'lead_time_days': lead_time,
             'safety_stock': safety_stock,
             'calculated_reorder_point': reorder_point,
-            'unit_profit': unit_profit,
-            'priority_score': priority_score,
-            'expected_restock_profit': expected_restock_profit,
             'reason': build_recommendation_reason(event_names),
             'generated_at': timezone.now(),
         }
@@ -128,7 +108,8 @@ def generate_recommendations():
             notify_reorder_recommendation(recommendation)
             results['created'] += 1
 
-    _assign_pending_priority_levels()
+    from .operational_priority import update_operational_priorities
+    update_operational_priorities()
 
     return results
 
@@ -142,6 +123,7 @@ def approve_recommendation(recommendation, user):
         po_number=PurchaseOrder.generate_po_number(),
         supplier=recommendation.supplier,
         status=PurchaseOrder.Status.DRAFT,
+        created_from=PurchaseOrder.Source.RECOMMENDATION,
         notes=f'Created from reorder recommendation #{recommendation.pk}.',
         created_by=user,
     )
@@ -158,8 +140,6 @@ def approve_recommendation(recommendation, user):
     recommendation.purchase_order = po
     recommendation.save()
 
-    _assign_pending_priority_levels()
-
     return po
 
 
@@ -170,7 +150,4 @@ def dismiss_recommendation(recommendation):
     recommendation.status = ReorderRecommendation.Status.DISMISSED
     recommendation.reviewed_at = timezone.now()
     recommendation.save()
-
-    _assign_pending_priority_levels()
-
     return recommendation

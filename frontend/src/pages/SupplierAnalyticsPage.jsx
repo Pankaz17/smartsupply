@@ -68,11 +68,32 @@ export default function SupplierAnalyticsPage() {
       {loading ? (
         <p className="text-sm text-slate-500">Loading supplier analytics...</p>
       ) : (
-        <DataTable
-          columns={columns}
-          data={snapshots}
-          emptyMessage="No supplier data yet. Receive purchase orders and run analytics."
-        />
+        <>
+          <DataTable
+            columns={columns}
+            data={snapshots}
+            emptyMessage="No supplier data yet. Receive purchase orders and run analytics."
+          />
+          {snapshots.length > 0 && (
+            <div className="mt-6 space-y-4">
+              {snapshots.map((snapshot) => (
+                <div key={snapshot.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    Supplier Insights — {snapshot.supplier_name}
+                  </h3>
+                  <ul className="mt-2 space-y-1 text-sm text-slate-700">
+                    {(snapshot.supplier_insights || []).map((insight) => (
+                      <li key={insight} className="flex items-start gap-2">
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
+                        <span>{insight}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   )

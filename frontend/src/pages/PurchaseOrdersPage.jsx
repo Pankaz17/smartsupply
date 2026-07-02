@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  createPurchaseOrder,
   getPurchaseOrder,
   getPurchaseOrders,
   updatePurchaseOrderStatus,
 } from '../api/purchaseOrders'
+import { getProducts } from '../api/products'
+import { getSuppliers } from '../api/suppliers'
 import PageHeader from '../components/layout/PageHeader'
 import Alert from '../components/ui/Alert'
 import Button from '../components/ui/Button'
+import ConfirmationDialog from '../components/ui/ConfirmationDialog'
 import DataTable from '../components/ui/DataTable'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
@@ -25,6 +29,11 @@ const STATUS_STYLES = {
   ordered: 'bg-blue-100 text-blue-700',
   received: 'bg-green-100 text-green-700',
   cancelled: 'bg-red-100 text-red-600',
+}
+
+const SOURCE_STYLES = {
+  recommendation: 'bg-blue-100 text-blue-700',
+  manual: 'bg-slate-100 text-slate-700',
 }
 
 function todayISO() {
@@ -46,7 +55,19 @@ export default function PurchaseOrdersPage() {
   const [success, setSuccess] = useState('')
   const [acting, setActing] = useState(false)
   const [showReceiveForm, setShowReceiveForm] = useState(false)
+  const [showReceiveConfirm, setShowReceiveConfirm] = useState(false)
   const [actualDeliveryDate, setActualDeliveryDate] = useState(todayISO())
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [suppliers, setSuppliers] = useState([])
+  const [products, setProducts] = useState([])
+  const [manualForm, setManualForm] = useState({
+    supplier: '',
+    product: '',
+    quantity: 1,
+    unit_cost: '',
+    notes: '',
+  })
 
   const load = useCallback(() => {
     setLoading(true)
@@ -60,9 +81,24 @@ export default function PurchaseOrdersPage() {
 
   useEffect(() => { load() }, [load])
 
+  useEffect(() => {
+    if (!isOwner) return
+    getSuppliers({ is_active: true }).then(setSuppliers).catch(() => {})
+    getProducts({ is_active: true }).then(setProducts).catch(() => {})
+  }, [isOwner])
+
+  const selectedManualProduct = products.find((p) => String(p.id) === String(manualForm.product))
+
+  useEffect(() => {
+    if (selectedManualProduct && !manualForm.unit_cost) {
+      setManualForm((prev) => ({ ...prev, unit_cost: selectedManualProduct.cost_price }))
+    }
+  }, [selectedManualProduct, manualForm.unit_cost])
+
   const openDetail = async (order) => {
     setDetailLoading(true)
     setShowReceiveForm(false)
+    setShowReceiveConfirm(false)
     setError('')
     try {
       const detail = await getPurchaseOrder(order.id)
@@ -88,11 +124,58 @@ export default function PurchaseOrdersPage() {
       setSelected(result.purchase_order)
       setSuccess(result.detail)
       setShowReceiveForm(false)
+      setShowReceiveConfirm(false)
       load()
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to update status.')
     } finally {
       setActing(false)
+    }
+  }
+
+  const openCreateModal = () => {
+    setManualForm({
+      supplier: '',
+      product: '',
+      quantity: 1,
+      unit_cost: '',
+      notes: '',
+    })
+    setShowCreateModal(true)
+  }
+
+  const handleCreateDraft = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+    setCreating(true)
+    try {
+      const payload = {
+        supplier: Number(manualForm.supplier),
+        product: Number(manualForm.product),
+        quantity: Number(manualForm.quantity),
+        notes: manualForm.notes,
+      }
+      if (manualForm.unit_cost !== '' && manualForm.unit_cost != null) {
+        payload.unit_cost = manualForm.unit_cost
+      }
+      const created = await createPurchaseOrder(payload)
+      setShowCreateModal(false)
+      setSuccess(`Draft purchase order ${created.po_number} created.`)
+      setSelected(created)
+      load()
+    } catch (err) {
+      const data = err.response?.data
+      setError(
+        data?.product?.[0]
+        || data?.supplier?.[0]
+        || data?.quantity?.[0]
+        || data?.unit_cost?.[0]
+        || data?.detail
+        || 'Failed to create purchase order.',
+      )
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -117,6 +200,15 @@ export default function PurchaseOrdersPage() {
       ),
     },
     { key: 'supplier_name', label: 'Supplier' },
+    {
+      key: 'created_from',
+      label: 'Source',
+      render: (r) => (
+        <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${SOURCE_STYLES[r.created_from] || SOURCE_STYLES.manual}`}>
+          {r.created_from}
+        </span>
+      ),
+    },
     {
       key: 'status',
       label: 'Status',
@@ -149,6 +241,9 @@ export default function PurchaseOrdersPage() {
       <PageHeader
         title="Purchase Orders"
         subtitle="Manage draft, ordered, and received purchase orders."
+        action={isOwner && (
+          <Button onClick={openCreateModal}>+ New Purchase Order</Button>
+        )}
       />
 
       <Alert type="error" message={error} />
@@ -253,7 +348,7 @@ export default function PurchaseOrdersPage() {
                         <Button
                           size="sm"
                           disabled={acting}
-                          onClick={() => handleStatusChange('received', actualDeliveryDate)}
+                          onClick={() => setShowReceiveConfirm(true)}
                         >
                           Confirm Receipt
                         </Button>
@@ -300,6 +395,85 @@ export default function PurchaseOrdersPage() {
           )}
         </div>
       </div>
+
+      {showCreateModal && isOwner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold text-slate-900">New Purchase Order</h2>
+            <p className="mt-1 text-sm text-slate-500">Create a draft purchase order manually.</p>
+            <form className="mt-4 space-y-4" onSubmit={handleCreateDraft}>
+              <Select
+                id="manual-po-supplier"
+                label="Supplier"
+                required
+                options={suppliers.map((s) => ({ value: s.id, label: s.name }))}
+                value={manualForm.supplier}
+                onChange={(e) => setManualForm((prev) => ({ ...prev, supplier: e.target.value, product: '', unit_cost: '' }))}
+              />
+              <Select
+                id="manual-po-product"
+                label="Product"
+                required
+                options={products
+                  .filter((p) => !manualForm.supplier || String(p.supplier) === String(manualForm.supplier))
+                  .map((p) => ({ value: p.id, label: `${p.sku} — ${p.name}` }))}
+                value={manualForm.product}
+                onChange={(e) => setManualForm((prev) => ({ ...prev, product: e.target.value, unit_cost: '' }))}
+              />
+              <Input
+                id="manual-po-quantity"
+                label="Quantity"
+                type="number"
+                min={1}
+                required
+                value={manualForm.quantity}
+                onChange={(e) => setManualForm((prev) => ({ ...prev, quantity: e.target.value }))}
+              />
+              <Input
+                id="manual-po-unit-cost"
+                label="Unit Cost"
+                type="number"
+                step="0.01"
+                min="0"
+                value={manualForm.unit_cost}
+                onChange={(e) => setManualForm((prev) => ({ ...prev, unit_cost: e.target.value }))}
+              />
+              <Input
+                id="manual-po-notes"
+                label="Notes (optional)"
+                value={manualForm.notes}
+                onChange={(e) => setManualForm((prev) => ({ ...prev, notes: e.target.value }))}
+              />
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={() => setShowCreateModal(false)} disabled={creating}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={creating}>
+                  {creating ? 'Creating...' : 'Create Draft'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <ConfirmationDialog
+        open={showReceiveConfirm}
+        title="Receive Purchase Order"
+        confirmLabel="Confirm Receipt"
+        onClose={() => setShowReceiveConfirm(false)}
+        onConfirm={() => handleStatusChange('received', actualDeliveryDate)}
+        confirming={acting}
+      >
+        <p>This will:</p>
+        <ul className="mt-2 list-inside list-disc space-y-1">
+          <li>Update inventory stock.</li>
+          <li>Mark the purchase order as received.</li>
+          <li>Record the delivery date.</li>
+          <li>Update supplier analytics.</li>
+        </ul>
+        <p className="mt-3 font-medium text-slate-800">This action cannot be undone.</p>
+      </ConfirmationDialog>
     </div>
   )
 }

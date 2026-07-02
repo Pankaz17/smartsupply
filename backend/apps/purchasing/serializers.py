@@ -1,6 +1,10 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
+from decimal import Decimal
 from django.utils import timezone
 from rest_framework import serializers
+
+from apps.products.models import Product
+from apps.suppliers.models import Supplier
 
 from .models import PurchaseOrder, PurchaseOrderItem, ReorderRecommendation
 
@@ -30,9 +34,6 @@ class ReorderRecommendationSerializer(serializers.ModelSerializer):
             'lead_time_days',
             'safety_stock',
             'calculated_reorder_point',
-            'unit_profit',
-            'priority_score',
-            'expected_restock_profit',
             'priority_level',
             'status',
             'reason',
@@ -74,6 +75,7 @@ class PurchaseOrderListSerializer(serializers.ModelSerializer):
             'po_number',
             'supplier',
             'supplier_name',
+            'created_from',
             'status',
             'ordered_at',
             'expected_delivery_date',
@@ -106,6 +108,7 @@ class PurchaseOrderDetailSerializer(serializers.ModelSerializer):
             'po_number',
             'supplier',
             'supplier_name',
+            'created_from',
             'status',
             'ordered_at',
             'expected_delivery_date',
@@ -147,3 +150,46 @@ class PurchaseOrderStatusSerializer(serializers.Serializer):
                 })
 
         return attrs
+
+
+class PurchaseOrderCreateSerializer(serializers.Serializer):
+    supplier = serializers.PrimaryKeyRelatedField(queryset=Supplier.objects.filter(is_active=True))
+    product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.filter(is_active=True))
+    quantity = serializers.IntegerField(min_value=1)
+    unit_cost = serializers.DecimalField(
+        max_digits=10, decimal_places=2, min_value=Decimal('0.00'), required=False,
+    )
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        supplier = attrs['supplier']
+        product = attrs['product']
+        if product.supplier_id != supplier.id:
+            raise serializers.ValidationError({
+                'product': 'Selected product does not belong to the selected supplier.',
+            })
+        return attrs
+
+    def create(self, validated_data):
+        supplier = validated_data['supplier']
+        product = validated_data['product']
+        quantity = validated_data['quantity']
+        unit_cost = validated_data.get('unit_cost', product.cost_price)
+        notes = validated_data.get('notes', '')
+        user = self.context['request'].user
+
+        po = PurchaseOrder.objects.create(
+            po_number=PurchaseOrder.generate_po_number(),
+            supplier=supplier,
+            status=PurchaseOrder.Status.DRAFT,
+            created_from=PurchaseOrder.Source.MANUAL,
+            notes=notes,
+            created_by=user,
+        )
+        PurchaseOrderItem.objects.create(
+            purchase_order=po,
+            product=product,
+            quantity=quantity,
+            unit_cost=unit_cost,
+        )
+        return po

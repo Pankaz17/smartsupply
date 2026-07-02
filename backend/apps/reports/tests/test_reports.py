@@ -1,6 +1,7 @@
 from django.test import TestCase
 from rest_framework import status
 
+from apps.sales.models import Sale
 from common.test_utils import auth_client, create_owner, create_product, ensure_business_settings
 
 
@@ -9,7 +10,14 @@ class ReportsTests(TestCase):
         ensure_business_settings()
         self.owner = create_owner()
         self.client = auth_client(self.owner)
-        create_product(stock=10)
+        self.product = create_product(stock=10)
+        Sale.record_sale(
+            product=self.product,
+            quantity=2,
+            unit_price=self.product.selling_price,
+            discount_amount='1.00',
+            recorded_by=self.owner,
+        )
 
     def test_inventory_report(self):
         response = self.client.get('/api/reports/inventory/')
@@ -35,3 +43,12 @@ class ReportsTests(TestCase):
     def test_invalid_range_preset_returns_400(self):
         response = self.client.get('/api/reports/sales/?range=365d')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_sales_report_includes_gross_discount_net(self):
+        response = self.client.get('/api/reports/sales/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        summary = response.data['summary']
+        self.assertIn('gross_sales', summary)
+        self.assertIn('total_discounts', summary)
+        self.assertIn('net_sales', summary)
+        self.assertGreaterEqual(float(summary['gross_sales']), float(summary['net_sales']))

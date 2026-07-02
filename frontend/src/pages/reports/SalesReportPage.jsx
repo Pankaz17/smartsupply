@@ -31,7 +31,9 @@ export default function SalesReportPage() {
   const columns = [
     { key: 'product', label: 'Product' },
     { key: 'units_sold', label: 'Units Sold' },
-    { key: 'revenue', label: 'Revenue', render: (r) => formatMoney(r.revenue) },
+    { key: 'gross_total', label: 'Gross Total', render: (r) => formatMoney(r.gross_total) },
+    { key: 'discount_amount', label: 'Discount Amount', render: (r) => formatMoney(r.discount_amount) },
+    { key: 'net_total', label: 'Net Total', render: (r) => formatMoney(r.net_total) },
   ]
 
   return (
@@ -51,7 +53,9 @@ export default function SalesReportPage() {
         <>
           <SummaryCards
             items={[
-              { label: 'Revenue', value: formatMoney(report?.summary?.revenue) },
+              { label: 'Gross Sales', value: formatMoney(report?.summary?.gross_sales) },
+              { label: 'Total Discounts', value: formatMoney(report?.summary?.total_discounts) },
+              { label: 'Net Sales', value: formatMoney(report?.summary?.net_sales) },
               { label: 'Units Sold', value: report?.summary?.units_sold ?? 0 },
               { label: 'Transactions', value: report?.summary?.transactions ?? 0 },
               { label: 'Average Sale Value', value: formatMoney(report?.summary?.average_sale_value) },
@@ -63,8 +67,8 @@ export default function SalesReportPage() {
             <SimpleLineChart
               data={report?.chart?.revenue_trend}
               xKey="date"
-              yKey="revenue"
-              yLabel="Revenue"
+              yKey="net_sales"
+              yLabel="Net Sales"
             />
           </div>
 

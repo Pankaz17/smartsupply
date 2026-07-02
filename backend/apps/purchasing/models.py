@@ -37,9 +37,6 @@ class ReorderRecommendation(models.Model):
     lead_time_days = models.PositiveIntegerField()
     safety_stock = models.DecimalField(max_digits=10, decimal_places=2)
     calculated_reorder_point = models.DecimalField(max_digits=10, decimal_places=2)
-    unit_profit = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    priority_score = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    expected_restock_profit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     priority_level = models.CharField(
         max_length=10,
         choices=PriorityLevel.choices,
@@ -62,10 +59,54 @@ class ReorderRecommendation(models.Model):
     )
 
     class Meta:
-        ordering = ['-priority_score', '-generated_at']
+        ordering = ['-generated_at']
 
     def __str__(self):
         return f'Recommendation for {self.product.name} ({self.status})'
+
+
+class ProfitAdvisorAnalysis(models.Model):
+    """Stores the latest Profit Advisor analysis (single-store singleton)."""
+
+    budget = models.DecimalField(max_digits=14, decimal_places=2)
+    recommended_spending = models.DecimalField(max_digits=14, decimal_places=2)
+    remaining_budget = models.DecimalField(max_digits=14, decimal_places=2)
+    expected_profit = models.DecimalField(max_digits=14, decimal_places=2)
+    recommended_count = models.PositiveIntegerField()
+    explanation = models.TextField()
+    recommended_products = models.JSONField(default=list)
+    deferred_products = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='profit_advisor_analyses',
+    )
+
+    class Meta:
+        verbose_name_plural = 'profit advisor analyses'
+
+    def __str__(self):
+        return f'Profit Advisor @ {self.created_at:%Y-%m-%d %H:%M}'
+
+    @classmethod
+    def get_latest(cls):
+        return cls.objects.order_by('-created_at').first()
+
+    @classmethod
+    def save_analysis(cls, user, analysis_data):
+        return cls.objects.create(
+            budget=analysis_data['budget'],
+            recommended_spending=analysis_data['recommended_spending'],
+            remaining_budget=analysis_data['remaining_budget'],
+            expected_profit=analysis_data['expected_profit'],
+            recommended_count=analysis_data['recommended_count'],
+            explanation=analysis_data['explanation'],
+            recommended_products=analysis_data['recommended_products'],
+            deferred_products=analysis_data['deferred_products'],
+            created_by=user,
+        )
 
 
 class PurchaseOrder(TimeStampedModel):
@@ -74,6 +115,10 @@ class PurchaseOrder(TimeStampedModel):
         ORDERED = 'ordered', 'Ordered'
         RECEIVED = 'received', 'Received'
         CANCELLED = 'cancelled', 'Cancelled'
+
+    class Source(models.TextChoices):
+        RECOMMENDATION = 'recommendation', 'Recommendation'
+        MANUAL = 'manual', 'Manual'
 
     po_number = models.CharField(max_length=20, unique=True)
     supplier = models.ForeignKey(
@@ -94,6 +139,11 @@ class PurchaseOrder(TimeStampedModel):
         help_text='Date the PO was marked as ordered. Set once on DRAFT → ORDERED.',
     )
     notes = models.TextField(blank=True)
+    created_from = models.CharField(
+        max_length=20,
+        choices=Source.choices,
+        default=Source.MANUAL,
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,

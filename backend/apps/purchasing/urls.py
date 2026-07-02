@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .profit_advisor_views import ProfitAdvisorExportView, ProfitAdvisorView
 from .views import (
     ApproveRecommendationView,
     DismissRecommendationView,
@@ -16,6 +17,16 @@ urlpatterns = [
         'recommendations/generate/',
         GenerateRecommendationsView.as_view(),
         name='recommendation-generate',
+    ),
+    path(
+        'recommendations/profit-advisor/',
+        ProfitAdvisorView.as_view(),
+        name='profit-advisor',
+    ),
+    path(
+        'recommendations/profit-advisor/export/',
+        ProfitAdvisorExportView.as_view(),
+        name='profit-advisor-export',
     ),
     path(
         'recommendations/<int:pk>/approve/',

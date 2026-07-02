@@ -8,6 +8,10 @@ from django.db.models.fields import DecimalField
 from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
 
+from apps.analytics.dead_stock_advisor import (
+    format_suggestions_for_export,
+    get_dead_stock_suggestions,
+)
 from apps.analytics.models import DeadStockSnapshot, SupplierPerformanceSnapshot
 from apps.products.models import Product
 from apps.purchasing.models import ReorderRecommendation
@@ -128,29 +132,50 @@ def build_sales_report(query_params):
     )
 
     agg = sales_qs.aggregate(
-        revenue=Coalesce(Sum('total_amount'), Decimal('0')),
+        gross_sales=Coalesce(
+            Sum(
+                ExpressionWrapper(
+                    F('quantity') * F('unit_price'),
+                    output_field=DecimalField(max_digits=14, decimal_places=2),
+                ),
+            ),
+            Decimal('0'),
+        ),
+        total_discounts=Coalesce(Sum('discount_amount'), Decimal('0')),
+        net_sales=Coalesce(Sum('total_amount'), Decimal('0')),
         units_sold=Coalesce(Sum('quantity'), 0),
         transactions=Count('id'),
     )
-    revenue = agg['revenue']
+    gross_sales = agg['gross_sales']
+    total_discounts = agg['total_discounts']
+    net_sales = agg['net_sales']
     units = agg['units_sold']
     transactions = agg['transactions']
-    avg_sale = revenue / transactions if transactions else Decimal('0')
+    avg_sale = net_sales / transactions if transactions else Decimal('0')
 
     product_rows = (
         sales_qs.values('product__name', 'product__sku')
         .annotate(
             units_sold=Sum('quantity'),
-            revenue=Sum('total_amount'),
+            gross_total=Sum(
+                ExpressionWrapper(
+                    F('quantity') * F('unit_price'),
+                    output_field=DecimalField(max_digits=14, decimal_places=2),
+                ),
+            ),
+            discount_amount=Sum('discount_amount'),
+            net_total=Sum('total_amount'),
         )
-        .order_by('-revenue')
+        .order_by('-net_total')
     )
     rows = [
         {
             'product': r['product__name'],
             'sku': r['product__sku'],
             'units_sold': r['units_sold'],
-            'revenue': _decimal_str(r['revenue']),
+            'gross_total': _decimal_str(r['gross_total']),
+            'discount_amount': _decimal_str(r['discount_amount']),
+            'net_total': _decimal_str(r['net_total']),
         }
         for r in product_rows
     ]
@@ -158,18 +183,20 @@ def build_sales_report(query_params):
     daily = (
         sales_qs.annotate(day=TruncDate('created_at'))
         .values('day')
-        .annotate(revenue=Sum('total_amount'))
+        .annotate(net_sales=Sum('total_amount'))
         .order_by('day')
     )
     chart = [
-        {'date': r['day'].isoformat(), 'revenue': float(r['revenue'] or 0)}
+        {'date': r['day'].isoformat(), 'net_sales': float(r['net_sales'] or 0)}
         for r in daily
     ]
 
     return {
         'date_range': {'start': str(start), 'end': str(end), 'range': range_label},
         'summary': {
-            'revenue': _decimal_str(revenue),
+            'gross_sales': _decimal_str(gross_sales),
+            'total_discounts': _decimal_str(total_discounts),
+            'net_sales': _decimal_str(net_sales),
             'units_sold': units,
             'transactions': transactions,
             'average_sale_value': _decimal_str(round(avg_sale, 2)),
@@ -187,8 +214,10 @@ def build_dead_stock_report(query_params):
         detected_at__date__lte=end,
     ).select_related('product', 'product__category').order_by('-inventory_value')
 
-    rows = [
-        {
+    rows = []
+    for s in snapshots:
+        suggestions = get_dead_stock_suggestions(s.days_without_sale)
+        rows.append({
             'product': s.product.name,
             'sku': s.product.sku,
             'category': s.product.category.name,
@@ -196,9 +225,9 @@ def build_dead_stock_report(query_params):
             'current_stock': s.current_stock,
             'inventory_value': _decimal_str(s.inventory_value),
             'severity': s.severity,
-        }
-        for s in snapshots
-    ]
+            'suggestions': suggestions,
+            'suggested_action': format_suggestions_for_export(suggestions),
+        })
 
     total_capital = snapshots.aggregate(
         total=Coalesce(Sum('inventory_value'), Decimal('0')),
@@ -290,20 +319,17 @@ def build_recommendations_report(query_params):
     status_counts = base_qs.values('status').annotate(count=Count('id'))
     counts = {item['status']: item['count'] for item in status_counts}
 
-    recs = base_qs.select_related('product').order_by('-priority_score', '-generated_at')
+    recs = base_qs.select_related('product').order_by('-generated_at')
 
     rows = [
         {
             'product': r.product.name,
             'sku': r.product.sku,
             'recommended_quantity': r.recommended_quantity,
+            'operational_priority': r.priority_level,
             'generated_date': r.generated_at.date().isoformat(),
             'status': r.status,
             'approved_date': r.reviewed_at.date().isoformat() if r.reviewed_at else None,
-            'unit_profit': _decimal_str(r.unit_profit),
-            'priority_score': _decimal_str(r.priority_score),
-            'expected_restock_profit': _decimal_str(r.expected_restock_profit),
-            'priority_level': r.priority_level,
         }
         for r in recs
     ]

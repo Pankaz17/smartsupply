@@ -1,6 +1,8 @@
 from rest_framework import serializers
 
+from .dead_stock_advisor import get_dead_stock_suggestions
 from .models import DeadStockSnapshot, SeasonalEvent, SupplierPerformanceSnapshot
+from .supplier_insights import build_supplier_insights
 
 
 class SeasonalEventSerializer(serializers.ModelSerializer):
@@ -41,6 +43,7 @@ class DeadStockSnapshotSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_sku = serializers.CharField(source='product.sku', read_only=True)
     category_name = serializers.CharField(source='product.category.name', read_only=True)
+    suggestions = serializers.SerializerMethodField()
 
     class Meta:
         model = DeadStockSnapshot
@@ -54,13 +57,18 @@ class DeadStockSnapshotSerializer(serializers.ModelSerializer):
             'current_stock',
             'inventory_value',
             'severity',
+            'suggestions',
             'detected_at',
         )
         read_only_fields = fields
 
+    def get_suggestions(self, obj):
+        return get_dead_stock_suggestions(obj.days_without_sale)
+
 
 class SupplierPerformanceSnapshotSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    supplier_insights = serializers.SerializerMethodField()
 
     class Meta:
         model = SupplierPerformanceSnapshot
@@ -74,5 +82,9 @@ class SupplierPerformanceSnapshotSerializer(serializers.ModelSerializer):
             'on_time_delivery_rate',
             'total_orders',
             'snapshot_date',
+            'supplier_insights',
         )
         read_only_fields = fields
+
+    def get_supplier_insights(self, obj):
+        return build_supplier_insights(obj)

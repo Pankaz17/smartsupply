@@ -4,8 +4,8 @@ import { getBusinessSettings } from '../api/auth'
 import { getDashboard } from '../api/dashboard'
 import Alert from '../components/ui/Alert'
 import DataTable from '../components/ui/DataTable'
+import OperationalPriorityBadge from '../components/ui/OperationalPriorityBadge'
 import PageHeader from '../components/layout/PageHeader'
-import PriorityBadge from '../components/ui/PriorityBadge'
 import { useAuth } from '../context/AuthContext'
 
 export default function DashboardPage() {
@@ -33,6 +33,20 @@ export default function DashboardPage() {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(num)
   }
 
+  const advisorIcon = (message) => {
+    const text = String(message || '').toLowerCase()
+    if (text.includes('healthy') || text.includes('recommends purchasing')) return '✅'
+    if (
+      text.includes('out of stock')
+      || text.includes('running low')
+      || text.includes('later than promised')
+      || text.includes('awaiting delivery')
+      || text.includes('not sold for over 120 days')
+      || text.includes('require restocking')
+    ) return '⚠'
+    return 'ℹ'
+  }
+
   const salesColumns = [
     { key: 'created_at', label: 'Date', render: (r) => new Date(r.created_at).toLocaleString() },
     { key: 'product_name', label: 'Product' },
@@ -43,34 +57,31 @@ export default function DashboardPage() {
 
   const recommendationColumns = [
     { key: 'product_name', label: 'Product' },
-    { key: 'supplier_name', label: 'Supplier' },
-    { key: 'current_stock', label: 'Stock' },
-    {
-      key: 'priority_score',
-      label: 'Priority Score',
-      render: (r) => Number(r.priority_score || 0).toFixed(2),
-    },
     {
       key: 'priority_level',
       label: 'Priority',
-      render: (r) => <PriorityBadge level={r.priority_level} />,
+      render: (r) => <OperationalPriorityBadge level={r.priority_level} />,
+    },
+    { key: 'supplier_name', label: 'Supplier' },
+    { key: 'current_stock', label: 'Stock' },
+    {
+      key: 'calculated_reorder_point',
+      label: 'ROP',
+      render: (r) => Number(r.calculated_reorder_point).toFixed(1),
     },
     { key: 'recommended_quantity', label: 'Qty' },
     { key: 'status', label: 'Status', render: (r) => <span className="capitalize">{r.status}</span> },
   ]
 
-  const topPriorityColumns = [
+  const topOperationalColumns = [
     { key: 'product_name', label: 'Product' },
     {
       key: 'priority_level',
-      label: 'Priority Level',
-      render: (r) => <PriorityBadge level={r.priority_level} />,
+      label: 'Priority',
+      render: (r) => <OperationalPriorityBadge level={r.priority_level} />,
     },
-    {
-      key: 'priority_score',
-      label: 'Priority Score',
-      render: (r) => Number(r.priority_score || 0).toFixed(2),
-    },
+    { key: 'current_stock', label: 'Current Stock' },
+    { key: 'recommended_quantity', label: 'Recommended Qty' },
   ]
 
   const poColumns = [
@@ -184,18 +195,71 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {(dashboard?.top_restock_priorities?.length > 0) && (
-            <div className="mt-8 rounded-xl border border-green-100 bg-green-50/50 p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-slate-900">Top Restock Priorities</h2>
-                <Link to="/recommendations" className="text-sm text-brand-600 hover:text-brand-700">View all</Link>
+          <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6">
+            <h2 className="text-lg font-semibold text-slate-900">Business Advisor</h2>
+            <p className="mt-1 text-sm font-medium text-brand-700">{dashboard?.greeting || 'Hello'}</p>
+            <ul className="mt-4 space-y-2">
+              {(dashboard?.business_advisor || ['Everything looks healthy today.']).map((message) => (
+                <li key={message} className="flex items-start gap-2 text-sm text-slate-700">
+                  <span className="mt-0.5">{advisorIcon(message)}</span>
+                  <span>{message}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="mt-8 rounded-xl border border-red-100 bg-red-50/40 p-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-slate-900">Top Operational Priorities</h2>
+              <Link to="/recommendations" className="text-sm text-brand-600 hover:text-brand-700">
+                View all
+              </Link>
+            </div>
+            <DataTable
+              columns={topOperationalColumns}
+              data={dashboard?.top_operational_priorities ?? []}
+              rowKey={(r) => r.product_name}
+              emptyMessage="No pending recommendations requiring attention."
+            />
+          </div>
+
+          {dashboard?.profit_advisor?.has_analysis && (
+            <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-slate-900">Latest Profit Advisor Analysis</h2>
+                <Link
+                  to="/recommendations"
+                  className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100"
+                >
+                  View Analysis
+                </Link>
               </div>
-              <DataTable
-                columns={topPriorityColumns}
-                data={dashboard.top_restock_priorities}
-                rowKey={(r) => r.product_name}
-                emptyMessage="No pending recommendations."
-              />
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <div className="text-sm text-slate-500">Budget</div>
+                  <div className="mt-1 font-semibold text-slate-900">
+                    {formatMoney(dashboard.profit_advisor.budget)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-500">Recommended Spending</div>
+                  <div className="mt-1 font-semibold text-slate-900">
+                    {formatMoney(dashboard.profit_advisor.recommended_spending)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-500">Deferred Spending</div>
+                  <div className="mt-1 font-semibold text-slate-900">
+                    {formatMoney(dashboard.profit_advisor.deferred_spending)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-500">Expected Profit</div>
+                  <div className="mt-1 font-semibold text-slate-900">
+                    {formatMoney(dashboard.profit_advisor.expected_profit)}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

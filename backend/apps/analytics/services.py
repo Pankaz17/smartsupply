@@ -198,6 +198,7 @@ def update_supplier_performance_snapshots():
 
 
 def run_nightly_analytics():
+    from apps.analytics.forecasting import update_demand_forecasts
     from apps.products.models import Product
     from apps.purchasing.services import generate_recommendations
     from apps.suppliers.models import Supplier
@@ -207,6 +208,7 @@ def run_nightly_analytics():
 
     supplier_results = update_supplier_performance_snapshots()
     dead_stock_results = update_dead_stock_snapshots()
+    forecast_results = update_demand_forecasts()
     recommendation_results = generate_recommendations()
 
     return {
@@ -218,5 +220,8 @@ def run_nightly_analytics():
         'dead_stock_flagged': dead_stock_results['flagged'],
         'dead_stock_cleared': dead_stock_results['cleared'],
         'supplier_snapshots_updated': supplier_results['updated'],
+        'forecasts_updated': forecast_results['forecasts_updated'],
+        'forecasts_available': forecast_results['forecasts_available'],
+        'forecasts_insufficient': forecast_results['forecasts_insufficient'],
         'active_seasonal_events': count_active_seasonal_events(),
     }

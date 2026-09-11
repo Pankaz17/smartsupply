@@ -12,7 +12,7 @@ from apps.analytics.dead_stock_advisor import (
     format_suggestions_for_export,
     get_dead_stock_suggestions,
 )
-from apps.analytics.models import DeadStockSnapshot, SupplierPerformanceSnapshot
+from apps.analytics.models import DeadStockSnapshot, DemandForecast, SupplierPerformanceSnapshot
 from apps.products.models import Product
 from apps.purchasing.models import ReorderRecommendation
 from apps.sales.models import Sale
@@ -344,4 +344,86 @@ def build_recommendations_report(query_params):
         },
         'rows': rows,
         'chart': {},
+    }
+
+
+def build_demand_forecast_report(query_params):
+    """Latest demand forecasts per active product (advisory; no inventory changes)."""
+    start, end, range_label = parse_date_range(query_params, default_days=30)
+    today = timezone.now().date()
+
+    latest = (
+        DemandForecast.objects.filter(product=OuterRef('pk'))
+        .order_by('-forecast_date')
+        .values('id')[:1]
+    )
+    products = Product.objects.filter(is_active=True).annotate(
+        latest_forecast_id=Subquery(latest),
+    ).order_by('name')
+
+    forecast_ids = [p.latest_forecast_id for p in products if p.latest_forecast_id]
+    forecasts_by_id = {
+        f.id: f
+        for f in DemandForecast.objects.filter(id__in=forecast_ids).select_related('product')
+    }
+
+    rows = []
+    available = 0
+    insufficient = 0
+    for product in products:
+        forecast = forecasts_by_id.get(product.latest_forecast_id)
+        if forecast is None:
+            rows.append({
+                'product': product.name,
+                'sku': product.sku,
+                'historical_ads': '0.00',
+                'predicted_daily_demand': None,
+                'forecast_horizon': 7,
+                'model': None,
+                'status': 'INSUFFICIENT_DATA',
+                'historical_observations': 0,
+                'mae': None,
+            })
+            insufficient += 1
+            continue
+
+        if forecast.status == DemandForecast.Status.FORECAST_AVAILABLE:
+            available += 1
+        else:
+            insufficient += 1
+
+        rows.append({
+            'product': product.name,
+            'sku': product.sku,
+            'historical_ads': _decimal_str(forecast.historical_ads),
+            'predicted_daily_demand': (
+                _decimal_str(forecast.predicted_daily_demand)
+                if forecast.predicted_daily_demand is not None
+                else None
+            ),
+            'forecast_horizon': forecast.forecast_horizon,
+            'model': forecast.model_name or None,
+            'status': forecast.status,
+            'historical_observations': forecast.historical_observations,
+            'mae': _decimal_str(forecast.mae) if forecast.mae is not None else None,
+        })
+
+    chart = [
+        {
+            'product': row['product'],
+            'predicted_daily_demand': float(row['predicted_daily_demand'] or 0),
+        }
+        for row in rows
+        if row['status'] == 'FORECAST_AVAILABLE'
+    ][:15]
+
+    return {
+        'date_range': {'start': str(start), 'end': str(end), 'range': range_label},
+        'summary': {
+            'products_with_forecast': available,
+            'products_insufficient_data': insufficient,
+            'forecast_as_of': str(today),
+        },
+        'rows': rows,
+        'chart': {'predicted_demand_by_product': chart},
     }

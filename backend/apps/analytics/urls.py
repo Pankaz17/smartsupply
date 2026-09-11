@@ -2,6 +2,8 @@ from django.urls import path
 
 from .views import (
     DeadStockListView,
+    DemandForecastListView,
+    DemandForecastRefreshView,
     RunAnalyticsView,
     SeasonalEventDetailView,
     SeasonalEventListCreateView,
@@ -22,4 +24,10 @@ urlpatterns = [
         name='supplier-analytics-list',
     ),
     path('analytics/run/', RunAnalyticsView.as_view(), name='analytics-run'),
+    path('analytics/forecast/', DemandForecastListView.as_view(), name='demand-forecast-list'),
+    path(
+        'analytics/forecast/refresh/',
+        DemandForecastRefreshView.as_view(),
+        name='demand-forecast-refresh',
+    ),
 ]

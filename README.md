@@ -139,6 +139,18 @@ python manage.py run_nightly_analytics
 
 Or trigger from the UI (owner): **Supplier Analytics** → Run Analytics, or `POST /api/analytics/run/`.
 
+This refreshes supplier snapshots, dead stock, **ARIMA demand forecasts**, and reorder recommendations.
+
+## Demand Forecasting (ARIMA)
+
+See [docs/forecasting.md](docs/forecasting.md).
+
+- UI: **Demand Forecast** in the sidebar
+- API: `GET /api/analytics/forecast/`
+- Report: **Reports → Demand Forecast Report** (CSV/Excel)
+
+Forecasts advise only — they never place orders or approve recommendations.
+
 ## Default User Roles
 
 | Role | Access |
@@ -164,6 +176,7 @@ WSGI/ASGI default to production settings; `manage.py` defaults to development fo
 - [Architecture](docs/architecture.md)
 - [API Overview](docs/api-overview.md)
 - [Deployment](docs/deployment.md)
+- [Demand Forecasting (ARIMA)](docs/forecasting.md)
 
 ## Stock Integrity
 

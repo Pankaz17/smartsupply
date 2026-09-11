@@ -7,6 +7,7 @@ from common.permissions import IsOwnerOrStaff
 from .exports import build_export_response
 from .services import (
     build_dead_stock_report,
+    build_demand_forecast_report,
     build_inventory_report,
     build_recommendations_report,
     build_reports_overview,
@@ -91,6 +92,24 @@ REPORT_CONFIG = {
         ],
         'summary_keys': [
             'total_recommendations', 'approved', 'dismissed', 'pending',
+        ],
+    },
+    'demand-forecast': {
+        'builder': build_demand_forecast_report,
+        'filename': 'demand_forecast_report',
+        'columns': [
+            {'key': 'product', 'label': 'Product'},
+            {'key': 'sku', 'label': 'SKU'},
+            {'key': 'historical_ads', 'label': 'Historical ADS'},
+            {'key': 'predicted_daily_demand', 'label': 'Predicted Daily Demand'},
+            {'key': 'forecast_horizon', 'label': 'Forecast Horizon'},
+            {'key': 'model', 'label': 'Model'},
+            {'key': 'status', 'label': 'Status'},
+            {'key': 'historical_observations', 'label': 'Historical Observations'},
+            {'key': 'mae', 'label': 'MAE'},
+        ],
+        'summary_keys': [
+            'products_with_forecast', 'products_insufficient_data', 'forecast_as_of',
         ],
     },
 }
@@ -181,3 +200,11 @@ class RecommendationsReportView(BaseReportView):
 
 class RecommendationsReportExportView(BaseReportExportView):
     report_key = 'recommendations'
+
+
+class DemandForecastReportView(BaseReportView):
+    report_key = 'demand-forecast'
+
+
+class DemandForecastReportExportView(BaseReportExportView):
+    report_key = 'demand-forecast'

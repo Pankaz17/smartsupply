@@ -10,6 +10,7 @@ const REPORT_LINKS = [
   { to: '/reports/dead-stock', label: 'Dead Stock Report', key: 'dead-stock' },
   { to: '/reports/suppliers', label: 'Supplier Report', key: 'suppliers' },
   { to: '/reports/recommendations', label: 'Recommendation Report', key: 'recommendations' },
+  { to: '/reports/demand-forecast', label: 'Demand Forecast Report', key: 'demand-forecast' },
   { to: '/reports/profit-advisor', label: 'Profit Advisor Report', key: 'profit-advisor' },
 ]
 

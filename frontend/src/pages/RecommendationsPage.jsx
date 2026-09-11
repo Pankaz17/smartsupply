@@ -162,6 +162,15 @@ export default function RecommendationsPage() {
     { key: 'current_stock', label: 'Current Stock' },
     { key: 'recommended_quantity', label: 'Recommended Qty' },
     {
+      key: 'demand_method',
+      label: 'Demand',
+      render: (r) => (
+        r.demand_method === 'arima_forecast'
+          ? <span className="text-xs font-medium text-brand-700">ARIMA</span>
+          : <span className="text-xs text-slate-500">Historical ADS</span>
+      ),
+    },
+    {
       key: 'status',
       label: 'Status',
       render: (r) => (

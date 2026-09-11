@@ -6,6 +6,7 @@ const navItems = [
   { to: '/recommendations', label: 'Recommendations' },
   { to: '/purchase-orders', label: 'Purchase Orders' },
   { to: '/dead-stock', label: 'Dead Stock' },
+  { to: '/demand-forecast', label: 'Demand Forecast' },
   { to: '/supplier-analytics', label: 'Supplier Analytics' },
   { to: '/seasonal-events', label: 'Seasonal Events' },
   { to: '/notifications', label: 'Notifications' },

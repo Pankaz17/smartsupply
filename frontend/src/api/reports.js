@@ -35,6 +35,10 @@ export function getRecommendationsReport(dateRange = { range: '30d' }) {
   return axiosClient.get('/reports/recommendations/', { params: buildParams(dateRange) }).then((r) => r.data)
 }
 
+export function getDemandForecastReport(dateRange = { range: '30d' }) {
+  return axiosClient.get('/reports/demand-forecast/', { params: buildParams(dateRange) }).then((r) => r.data)
+}
+
 export async function exportReport(reportKey, format, dateRange = { range: '30d' }) {
   const params = { export_format: format, ...buildParams(dateRange) }
   const response = await axiosClient.get(`/reports/${reportKey}/export/`, {

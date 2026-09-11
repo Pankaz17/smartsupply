@@ -109,7 +109,7 @@ def check_stock_notifications(product):
         notify_out_of_stock(product)
         return
 
-    _, _, _, reorder_point, _ = calculate_reorder_metrics(product)
+    _, _, _, reorder_point, _, _ = calculate_reorder_metrics(product)
     if product.current_stock <= reorder_point:
         notify_low_stock(product, reorder_point)
 

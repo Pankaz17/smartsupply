@@ -57,6 +57,8 @@ All authenticated endpoints require `Authorization: Bearer <access_token>` unles
 | GET | `/dead-stock/` | All |
 | GET | `/supplier-analytics/` | All |
 | POST | `/analytics/run/` | Owner |
+| GET | `/analytics/forecast/` | Owner, Staff |
+| POST | `/analytics/forecast/refresh/` | Owner |
 
 ## Notifications
 
@@ -77,6 +79,8 @@ All authenticated endpoints require `Authorization: Bearer <access_token>` unles
 | GET | `/reports/dead-stock/` | Owner, Staff |
 | GET | `/reports/suppliers/` | Owner, Staff |
 | GET | `/reports/recommendations/` | Owner, Staff |
+| GET | `/reports/demand-forecast/` | Owner, Staff |
+| GET | `/reports/*/export/?export_format=csv|xlsx` | Owner, Staff |
 
 ### Report Query Parameters
 

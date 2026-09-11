@@ -59,19 +59,20 @@ PATCH status → received → apply stock, set actual_delivery_date
 
 ```
 generate_recommendations()
-  → ADS (30-day average daily sales)
-  → seasonal multiplier
-  → ROP = ADS × lead_time + safety_stock (ADS × 3)
-  → create/update pending recommendation
+  → IF ARIMA forecast available: use predicted daily demand (no seasonal re-multiply)
+  → ELSE: historical ADS (30-day) × seasonal multiplier
+  → ROP = demand × lead_time + safety_stock (demand × 3)
+  → create/update pending recommendation (owner must approve)
 ```
 
 ### Analytics (Nightly)
 
 ```
 run_nightly_analytics
-  → update dead stock snapshots
   → update supplier performance snapshots
-  → generate dead stock / supplier delay notifications
+  → update dead stock snapshots
+  → update demand forecasts (ARIMA)
+  → generate recommendations
 ```
 
 ## Frontend Structure
@@ -97,5 +98,19 @@ src/
 
 - No public user registration
 - No automatic purchasing
-- No ML / external forecasting APIs
+- No external forecasting SaaS APIs (local ARIMA via statsmodels only)
 - Stock not editable via product CRUD
+
+## Demand Forecasting (Phase 10.1)
+
+| Concept | Role |
+|---------|------|
+| Historical ADS | 30-day average daily sales from `Sale` rows |
+| Seasonal Intelligence | Calendar `SeasonalEvent` multipliers applied only on ADS fallback |
+| ARIMA Forecast | Time-series predicted daily demand from filled daily sales series |
+| Operational Priority | Urgency ranking of pending recommendations (not a demand model) |
+| Profit Advisor | Budget allocation helper over pending recommendations (not a demand model) |
+
+**Minimum history:** 30 filled daily observations. **Horizon:** 7 days.  
+**Fallback:** `INSUFFICIENT_DATA` → Historical ADS (+ seasonal multiplier).  
+**Accuracy:** hold-out MAE when enough history exists; otherwise MAE is null.

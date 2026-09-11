@@ -26,7 +26,7 @@ def _get_low_stock_count():
         'supplier', 'category',
     )
     for product in products:
-        _, _, _, reorder_point, _ = calculate_reorder_metrics(product)
+        _, _, _, reorder_point, _, _ = calculate_reorder_metrics(product)
         if product.current_stock <= reorder_point:
             count += 1
     return count
@@ -98,6 +98,9 @@ def build_business_advisor_messages():
     if pending_recommendations:
         noun = 'product currently requires' if pending_recommendations == 1 else 'products currently require'
         messages.append(f'{pending_recommendations} {noun} restocking.')
+
+    from apps.analytics.forecasting.demand_forecast import build_forecast_advisor_messages
+    messages.extend(build_forecast_advisor_messages(limit=2))
 
     if not messages:
         return ['Everything looks healthy today.']

@@ -18,7 +18,7 @@ class NotificationTests(TestCase):
         self.product.refresh_from_db()
 
     def test_low_stock_notification(self):
-        _, _, _, reorder_point, _ = calculate_reorder_metrics(self.product)
+        _, _, _, reorder_point, _, _ = calculate_reorder_metrics(self.product)
         low_stock = max(1, int(reorder_point))
         type(self.product).objects.filter(pk=self.product.pk).update(current_stock=low_stock)
         self.product.refresh_from_db()

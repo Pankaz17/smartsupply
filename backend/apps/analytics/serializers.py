@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from .dead_stock_advisor import get_dead_stock_suggestions
-from .models import DeadStockSnapshot, SeasonalEvent, SupplierPerformanceSnapshot
+from .models import DeadStockSnapshot, DemandForecast, SeasonalEvent, SupplierPerformanceSnapshot
 from .supplier_insights import build_supplier_insights
 
 
@@ -88,3 +88,60 @@ class SupplierPerformanceSnapshotSerializer(serializers.ModelSerializer):
 
     def get_supplier_insights(self, obj):
         return build_supplier_insights(obj)
+
+
+class DemandForecastSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    model = serializers.SerializerMethodField()
+    predicted_daily_demand = serializers.SerializerMethodField()
+    predicted_horizon_total = serializers.SerializerMethodField()
+    historical_ads = serializers.SerializerMethodField()
+    mae = serializers.SerializerMethodField()
+    fallback = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DemandForecast
+        fields = (
+            'id',
+            'product',
+            'product_name',
+            'product_sku',
+            'forecast_date',
+            'forecast_horizon',
+            'predicted_daily_demand',
+            'predicted_horizon_total',
+            'model',
+            'historical_observations',
+            'historical_ads',
+            'status',
+            'mae',
+            'trend',
+            'fallback',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = fields
+
+    def get_model(self, obj):
+        return obj.model_name or None
+
+    def _dec(self, value):
+        return str(value) if value is not None else None
+
+    def get_predicted_daily_demand(self, obj):
+        return self._dec(obj.predicted_daily_demand)
+
+    def get_predicted_horizon_total(self, obj):
+        return self._dec(obj.predicted_horizon_total)
+
+    def get_historical_ads(self, obj):
+        return self._dec(obj.historical_ads)
+
+    def get_mae(self, obj):
+        return self._dec(obj.mae)
+
+    def get_fallback(self, obj):
+        if obj.status == DemandForecast.Status.INSUFFICIENT_DATA:
+            return 'Historical ADS'
+        return None

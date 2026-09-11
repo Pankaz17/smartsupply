@@ -21,6 +21,10 @@ class ReorderRecommendation(models.Model):
         MEDIUM = 'MEDIUM', 'Medium'
         LOW = 'LOW', 'Low'
 
+    class DemandMethod(models.TextChoices):
+        HISTORICAL_ADS = 'historical_ads', 'Historical ADS'
+        ARIMA_FORECAST = 'arima_forecast', 'ARIMA Forecast'
+
     product = models.ForeignKey(
         'products.Product',
         on_delete=models.CASCADE,
@@ -37,6 +41,12 @@ class ReorderRecommendation(models.Model):
     lead_time_days = models.PositiveIntegerField()
     safety_stock = models.DecimalField(max_digits=10, decimal_places=2)
     calculated_reorder_point = models.DecimalField(max_digits=10, decimal_places=2)
+    demand_method = models.CharField(
+        max_length=20,
+        choices=DemandMethod.choices,
+        default=DemandMethod.HISTORICAL_ADS,
+        help_text='Whether ROP used ARIMA forecast or historical ADS fallback.',
+    )
     priority_level = models.CharField(
         max_length=10,
         choices=PriorityLevel.choices,

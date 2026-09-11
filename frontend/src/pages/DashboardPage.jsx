@@ -42,7 +42,9 @@ export default function DashboardPage() {
       || text.includes('later than promised')
       || text.includes('awaiting delivery')
       || text.includes('not sold for over 120 days')
-      || text.includes('require restocking')
+      || text.includes('restocking')
+      || text.includes('forecasted demand')
+      || text.includes('forecast indicates')
     ) return '⚠'
     return 'ℹ'
   }

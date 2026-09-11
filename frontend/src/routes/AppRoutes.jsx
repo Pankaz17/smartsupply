@@ -4,12 +4,14 @@ import CategoriesPage from '../pages/CategoriesPage'
 import ChangePasswordPage from '../pages/ChangePasswordPage'
 import DashboardPage from '../pages/DashboardPage'
 import DeadStockPage from '../pages/DeadStockPage'
+import DemandForecastPage from '../pages/DemandForecastPage'
 import LoginPage from '../pages/LoginPage'
 import NotificationsPage from '../pages/NotificationsPage'
 import ProductsPage from '../pages/ProductsPage'
 import PurchaseOrdersPage from '../pages/PurchaseOrdersPage'
 import RecommendationsPage from '../pages/RecommendationsPage'
 import DeadStockReportPage from '../pages/reports/DeadStockReportPage'
+import DemandForecastReportPage from '../pages/reports/DemandForecastReportPage'
 import InventoryReportPage from '../pages/reports/InventoryReportPage'
 import RecommendationsReportPage from '../pages/reports/RecommendationsReportPage'
 import ProfitAdvisorReportPage from '../pages/reports/ProfitAdvisorReportPage'
@@ -35,6 +37,7 @@ export default function AppRoutes() {
           <Route path="recommendations" element={<RecommendationsPage />} />
           <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
           <Route path="dead-stock" element={<DeadStockPage />} />
+          <Route path="demand-forecast" element={<DemandForecastPage />} />
           <Route path="supplier-analytics" element={<SupplierAnalyticsPage />} />
           <Route path="seasonal-events" element={<SeasonalEventsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
@@ -45,6 +48,7 @@ export default function AppRoutes() {
           <Route path="reports/dead-stock" element={<DeadStockReportPage />} />
           <Route path="reports/suppliers" element={<SupplierReportPage />} />
           <Route path="reports/recommendations" element={<RecommendationsReportPage />} />
+          <Route path="reports/demand-forecast" element={<DemandForecastReportPage />} />
           <Route path="reports/profit-advisor" element={<ProfitAdvisorReportPage />} />
           <Route path="products" element={<ProductsPage />} />
           <Route path="sales" element={<SalesPage />} />

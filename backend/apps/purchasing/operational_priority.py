@@ -10,7 +10,7 @@ def calculate_urgency_score(recommendation):
     """
     Operational urgency from inventory intelligence only.
 
-    Uses stock shortage, ADS (includes seasonal multiplier), lead time, and
+    Uses stock shortage, ADS (includes seasonal multiplier or ARIMA demand), lead time, and
     safety stock relative to reorder point. Does not use cost, price, or profit.
     """
     stock = Decimal(recommendation.current_stock)

@@ -55,7 +55,9 @@ def create_supplier(**kwargs):
 def create_category(**kwargs):
     defaults = {'name': 'Test Category', 'is_active': True}
     defaults.update(kwargs)
-    return ProductCategory.objects.create(**defaults)
+    name = defaults.pop('name')
+    category, _ = ProductCategory.objects.get_or_create(name=name, defaults=defaults)
+    return category
 
 
 def create_product(stock=10, **kwargs):

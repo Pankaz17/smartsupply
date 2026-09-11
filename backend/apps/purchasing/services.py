@@ -5,6 +5,10 @@ from decimal import Decimal
 from django.db.models import Sum
 from django.utils import timezone
 
+from apps.analytics.forecasting import (
+    STATUS_FORECAST_AVAILABLE,
+    get_or_compute_forecast,
+)
 from apps.analytics.services import get_seasonal_multiplier
 from apps.products.models import Product
 from apps.sales.models import Sale
@@ -27,23 +31,61 @@ def calculate_average_daily_sales(product, days=SALES_LOOKBACK_DAYS):
 
 
 def calculate_reorder_metrics(product):
-    base_ads = calculate_average_daily_sales(product)
-    multiplier, event_names = get_seasonal_multiplier(product)
-    ads = base_ads * multiplier
+    """
+    Compute seasonally-aware (or forecast-based) demand metrics for ROP.
+
+    Demand source selection
+    -----------------------
+    IF a reliable ARIMA forecast exists (FORECAST_AVAILABLE):
+        use predicted_daily_demand as ads
+        do NOT apply SeasonalEvent multiplier (avoids double-counting seasonality)
+        demand_method = arima_forecast
+    ELSE:
+        use historical 30-day ADS × SeasonalEvent multiplier (existing behaviour)
+        demand_method = historical_ads
+
+    Returns:
+        ads, lead_time, safety_stock, reorder_point, event_names, demand_method
+    """
+    forecast = get_or_compute_forecast(product, persist=True)
+
+    if (
+        forecast.status == STATUS_FORECAST_AVAILABLE
+        and forecast.predicted_daily_demand is not None
+    ):
+        # ARIMA path — seasonal multiplier skipped (see forecasting/demand_forecast.py).
+        ads = forecast.predicted_daily_demand
+        event_names = []
+        demand_method = ReorderRecommendation.DemandMethod.ARIMA_FORECAST
+    else:
+        base_ads = calculate_average_daily_sales(product)
+        multiplier, event_names = get_seasonal_multiplier(product)
+        ads = base_ads * multiplier
+        demand_method = ReorderRecommendation.DemandMethod.HISTORICAL_ADS
+
     lead_time = product.supplier.promised_lead_time_days
     safety_stock = ads * SAFETY_STOCK_MULTIPLIER
     reorder_point = (ads * lead_time) + safety_stock
-    return ads, lead_time, safety_stock, reorder_point, event_names
+    return ads, lead_time, safety_stock, reorder_point, event_names, demand_method
 
 
-def build_recommendation_reason(event_names):
+def build_recommendation_reason(event_names, demand_method):
+    if demand_method == ReorderRecommendation.DemandMethod.ARIMA_FORECAST:
+        return (
+            'Current stock below reorder point. '
+            'Demand based on ARIMA forecast (seasonal event multiplier not re-applied).'
+        )
     if event_names:
         names = ', '.join(event_names)
         return (
             f'Current stock below reorder point. '
-            f'{names} seasonal multiplier applied.'
+            f'{names} seasonal multiplier applied. '
+            f'Demand based on historical ADS (forecast unavailable).'
         )
-    return DEFAULT_REASON
+    return (
+        'Current stock below reorder point. '
+        'Demand based on historical ADS (forecast unavailable).'
+    )
 
 
 def calculate_recommended_quantity(current_stock, reorder_point):
@@ -60,7 +102,7 @@ def generate_recommendations():
         'supplier', 'category',
     )
     for product in products:
-        ads, lead_time, safety_stock, reorder_point, event_names = (
+        ads, lead_time, safety_stock, reorder_point, event_names, demand_method = (
             calculate_reorder_metrics(product)
         )
 
@@ -89,7 +131,8 @@ def generate_recommendations():
             'lead_time_days': lead_time,
             'safety_stock': safety_stock,
             'calculated_reorder_point': reorder_point,
-            'reason': build_recommendation_reason(event_names),
+            'demand_method': demand_method,
+            'reason': build_recommendation_reason(event_names, demand_method),
             'generated_at': timezone.now(),
         }
 

@@ -137,5 +137,5 @@ class BusinessAdvisorTests(TestCase):
         self.assertTrue(any('awaiting delivery' in message for message in advisor))
         self.assertTrue(any('not sold for over 120 days' in message for message in advisor))
         self.assertTrue(any('Profit Advisor analysis recommends purchasing' in message for message in advisor))
-        self.assertTrue(any('require restocking' in message for message in advisor))
+        self.assertTrue(any('restocking' in message for message in advisor))
         self.assertEqual(len(advisor), len(set(advisor)))

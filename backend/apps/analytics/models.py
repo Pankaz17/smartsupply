@@ -73,3 +73,40 @@ class SupplierPerformanceSnapshot(models.Model):
 
     def __str__(self):
         return f'{self.supplier.name} @ {self.snapshot_date}'
+
+
+class DemandForecast(models.Model):
+    """Persisted ARIMA (or fallback) demand forecast for dashboard/reports."""
+
+    class Status(models.TextChoices):
+        FORECAST_AVAILABLE = 'FORECAST_AVAILABLE', 'Forecast Available'
+        INSUFFICIENT_DATA = 'INSUFFICIENT_DATA', 'Insufficient Data'
+
+    product = models.ForeignKey(
+        'products.Product',
+        on_delete=models.CASCADE,
+        related_name='demand_forecasts',
+    )
+    forecast_date = models.DateField()
+    forecast_horizon = models.PositiveIntegerField(default=7)
+    predicted_daily_demand = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+    )
+    predicted_horizon_total = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+    )
+    model_name = models.CharField(max_length=32, blank=True, default='')
+    historical_observations = models.PositiveIntegerField(default=0)
+    historical_ads = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    status = models.CharField(max_length=32, choices=Status.choices)
+    mae = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    trend = models.CharField(max_length=16, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-forecast_date', 'product__name']
+        unique_together = [('product', 'forecast_date')]
+
+    def __str__(self):
+        return f'{self.product.name} forecast @ {self.forecast_date} ({self.status})'

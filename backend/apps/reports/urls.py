@@ -3,6 +3,8 @@ from django.urls import path
 from .views import (
     DeadStockReportExportView,
     DeadStockReportView,
+    DemandForecastReportExportView,
+    DemandForecastReportView,
     InventoryReportExportView,
     InventoryReportView,
     RecommendationsReportExportView,
@@ -49,5 +51,15 @@ urlpatterns = [
         'reports/recommendations/',
         RecommendationsReportView.as_view(),
         name='report-recommendations',
+    ),
+    path(
+        'reports/demand-forecast/export/',
+        DemandForecastReportExportView.as_view(),
+        name='report-demand-forecast-export',
+    ),
+    path(
+        'reports/demand-forecast/',
+        DemandForecastReportView.as_view(),
+        name='report-demand-forecast',
     ),
 ]

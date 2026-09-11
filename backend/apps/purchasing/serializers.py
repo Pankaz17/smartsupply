@@ -34,6 +34,7 @@ class ReorderRecommendationSerializer(serializers.ModelSerializer):
             'lead_time_days',
             'safety_stock',
             'calculated_reorder_point',
+            'demand_method',
             'priority_level',
             'status',
             'reason',
